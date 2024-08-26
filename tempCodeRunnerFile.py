@@ -1,0 +1,1 @@
+C:/Users/adity/Downloads/archive/runs/detect/train12(70)/weights/best.pt

@@ -1,0 +1,116 @@
+from flask import Flask, request, render_template, jsonify
+import torch
+from pathlib import Path
+from yolov8 import Detector
+
+# Initialize Flask app
+app = Flask(__name__)
+
+# Load YOLOv8 model (replace 'yolov8s.pt' with your model path)
+model_path = Path('C:/Users/adity/Downloads/archive/runs/detect/train12(70)/weights/best.pt')
+model = Detector(model_path)
+
+# Define route for uploading image
+@app.route('/', methods=['GET', 'POST'])
+def upload_image():
+    if request.method == 'POST':
+        # Get uploaded image
+        image_file = request.files['image']
+        if image_file:
+            # Read image bytes
+            image_bytes = image_file.read()
+
+            # Preprocess and perform object detection
+            results = model(image_bytes)
+
+            # Prepare response data (modify to fit your needs)
+            data = []
+            for result in results.pandas().xyxy[0]:
+                data.append({
+                    'name': result['name'],
+                    'confidence': float(result['confidence']),
+                    'xmin': int(result['xmin']),
+                    'ymin': int(result['ymin']),
+                    'xmax': int(result['xmax']),
+                    'ymax': int(result['ymax']),
+                })
+
+            return jsonify({'results': data})
+
+        else:
+            return jsonify({'error': 'No image uploaded'}), 400
+
+    return render_template('upload.html')
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>YOLOv8 Object Detection</title>
+    <style>
+        canvas {
+            display:block;
+            border: 1px solid black;
+            margin-top:10px;
+        }
+    </style>
+</head>
+<body>
+    <input id="uploadInput" type="file"/>
+    <canvas></canvas>
+    <script>
+       /**
+       * "Upload" button onClick handler: uploads selected 
+       * image file to backend, receives an array of
+       * detected objects and draws them on top of image
+       */
+       const input = document.getElementById("uploadInput");
+       input.addEventListener("change",async(event) => {
+           const file = event.target.files[0];
+           const data = new FormData();
+           data.append("image_file",file,"image_file");
+           const response = await fetch("/detect",{
+               method:"post",
+               body:data
+           });
+           const boxes = await response.json();
+           draw_image_and_boxes(file,boxes);
+       })
+
+       /**
+       * Function draws the image from provided file
+       * and bounding boxes of detected objects on
+       * top of the image
+       * @param file Uploaded file object
+       * @param boxes Array of bounding boxes in format
+         [[x1,y1,x2,y2,object_type,probability],...]
+       */
+       function draw_image_and_boxes(file,boxes) {
+          const img = new Image()
+          img.src = URL.createObjectURL(file);
+          img.onload = () => {
+              const canvas = document.querySelector("canvas");
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(img,0,0);
+              ctx.strokeStyle = "#00FF00";
+              ctx.lineWidth = 3;
+              ctx.font = "18px serif";
+              boxes.forEach(([x1,y1,x2,y2,label]) => {
+                  ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+                  ctx.fillStyle = "#00ff00";
+                  const width = ctx.measureText(label).width;
+                  ctx.fillRect(x1,y1,width+10,25);
+                  ctx.fillStyle = "#000000";
+                  ctx.fillText(label,x1,y1+18);
+              });
+          }
+       }
+  </script>  
+</body>
+</html>
